@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Kinetic - Final Stable</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Orbitron', sans-serif; }
+        #ui {
+            position: absolute; top: 30px; left: 30px; color: #0ff; z-index: 10;
+            background: rgba(0, 15, 30, 0.9); padding: 25px;
+            border-left: 5px solid #0ff; border-radius: 0 10px 10px 0;
+            pointer-events: none;
+        }
+        .cam-box { position: absolute; bottom: 30px; right: 30px; width: 240px; height: 180px; overflow: hidden; border-radius: 12px; border: 1px solid #333; }
+        #video, #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); }
+        #video { opacity: 0.3; background: #111; }
+        #overlay { z-index: 5; }
+        .mode-text { font-size: 1.5em; color: #fff; text-shadow: 0 0 10px #0ff; }
+        #loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; color: #0ff; display: flex; align-items: center; justify-content: center; z-index: 100; transition: opacity 0.5s; }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<div id="loader">SYSTEM_BOOTING... [PLEASE ALLOW CAMERA]</div>
+
+<div id="ui">
+    <div style="font-size: 0.7em; opacity: 0.7; letter-spacing: 2px;">FIELD_STABILITY: ACTIVE</div>
+    <div id="orbital-name" class="mode-text">4f Orbital</div>
+    <div style="margin-top: 10px; font-size: 0.6em; line-height: 1.8; opacity: 0.8;">
+        <span style="color:#0ff">●</span> MOVE PALM → POSITION & ROTATE<br>
+        <span style="color:#0ff">●</span> PINCH → QUANTUM SCALE<br>
+        <span style="color:#0ff">●</span> VICTORY SIGN → CYCLE MODE
+    </div>
+</div>
+
+<div class="cam-box">
+    <video id="video" playsinline></video>
+    <canvas id="overlay"></canvas>
+</div>
+
+<script type="module">
+import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+
+/* --- 1. QUANTUM PHYSICS ENGINE --- */
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.z = 75;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+const N = 15000;
+const pointsGeo = new THREE.BufferGeometry();
+const basePos = new Float32Array(N * 3);
+const currentPos = new Float32Array(N * 3);
+const colors = new Float32Array(N * 3);
+
+const mat = new THREE.PointsMaterial({
+    size: 0.25, vertexColors: true, transparent: true,
+    blending: THREE.AdditiveBlending, opacity: 0.8
+});
+
+const orbitalPoints = new THREE.Points(pointsGeo, mat);
+scene.add(orbitalPoints);
+
+let currentMode = 'f';
+const modes = ['s', 'p', 'd', 'f'];
+
+function computeOrbital(type) {
+    let i = 0;
+    document.getElementById('orbital-name').textContent = `${type.toUpperCase()} ORBITAL`;
+    while (i < N) {
+        const r = Math.random() * 45;
+        const t = Math.random() * Math.PI;
+        const p = Math.random() * Math.PI * 2;
+        let psi;
+        if (type === 's') psi = Math.exp(-r / 6);
+        else if (type === 'p') psi = r * Math.cos(t) * Math.exp(-r / 7);
+        else if (type === 'd') psi = r * r * (3 * Math.pow(Math.cos(t), 2) - 1) * Math.exp(-r / 8);
+        else if (type === 'f') psi = Math.pow(r, 3) * (5 * Math.pow(Math.cos(t), 3) - 3 * Math.cos(t)) * Math.exp(-r / 9);
+
+        if (Math.random() < Math.abs(psi) * 0.7) {
+            const idx = i * 3;
+            basePos[idx] = r * Math.sin(t) * Math.cos(p);
+            basePos[idx+1] = r * Math.sin(t) * Math.sin(p);
+            basePos[idx+2] = r * Math.cos(t);
+            const color = new THREE.Color().setHSL(psi > 0 ? 0.55 : 0.85, 1.0, 0.5); 
+            colors[idx] = color.r; colors[idx+1] = color.g; colors[idx+2] = color.b;
+            i++;
+        }
+    }
+    pointsGeo.setAttribute('position', new THREE.BufferAttribute(currentPos, 3));
+    pointsGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+}
+computeOrbital(currentMode);
+
+/* --- 2. VISION & HAND TRACKING --- */
+const video = document.getElementById("video");
+const overlay = document.getElementById("overlay");
+const ctx = overlay.getContext("2d");
+
+let tPos = new THREE.Vector3(0,0,0);
+let tRot = new THREE.Euler(0,0,0);
+let tScale = 1;
+let lastGesture = 0;
+
+const hands = new Hands({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+
+hands.setOptions({ 
+    maxNumHands: 1, 
+    modelComplexity: 1, 
+    minDetectionConfidence: 0.7, 
+    minTrackingConfidence: 0.7 
+});
+
+hands.onResults((res) => {
+    document.getElementById('loader').style.opacity = '0';
+    setTimeout(() => document.getElementById('loader').style.display = 'none', 500);
+
+    overlay.width = video.videoWidth;
+    overlay.height = video.videoHeight;
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+    if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
+        const lm = res.multiHandLandmarks[0];
+        drawConnectors(ctx, lm, HAND_CONNECTIONS, {color: '#0ff', lineWidth: 2});
+        drawLandmarks(ctx, lm, {color: '#fff', radius: 2});
+
+        // Mapping Position & Orientation
+        tPos.set((lm[9].x - 0.5) * -110, (lm[9].y - 0.5) * -70, 0);
+        
+        // Tilt Logic
+        const dx = lm[9].x - lm[0].x;
+        const dy = lm[9].y - lm[0].y;
+        tRot.set((lm[9].y - 0.5) * 3, (lm[9].x - 0.5) * 3, -Math.atan2(dx, dy));
+
+        // Pinch Zoom
+        const dist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
+        tScale = Math.max(0.3, Math.pow(3 * (1 - dist), 2.5));
+
+        // Switch Gesture (Index + Middle Up)
+        if (lm[8].y < lm[6].y && lm[12].y < lm[10].y && lm[16].y > lm[14].y) {
+            if (Date.now() - lastGesture > 1200) {
+                currentMode = modes[(modes.indexOf(currentMode) + 1) % modes.length];
+                computeOrbital(currentMode);
+                lastGesture = Date.now();
+            }
+        }
+    }
+});
+
+const cam = new Camera(video, {
+    onFrame: async () => await hands.send({ image: video }),
+    width: 640, height: 480
+});
+cam.start();
+
+/* --- 3. THE LOOP --- */
+function animate(time) {
+    requestAnimationFrame(animate);
+    const pulse = time * 0.002;
+
+    // Smooth Kinetic Motion
+    orbitalPoints.position.lerp(tPos, 0.1);
+    orbitalPoints.rotation.x = THREE.MathUtils.lerp(orbitalPoints.rotation.x, tRot.x, 0.05);
+    orbitalPoints.rotation.y = THREE.MathUtils.lerp(orbitalPoints.rotation.y, tRot.y, 0.05);
+    orbitalPoints.rotation.z = THREE.MathUtils.lerp(orbitalPoints.rotation.z, tRot.z, 0.05);
+    
+    const s = THREE.MathUtils.lerp(orbitalPoints.scale.x, tScale, 0.1);
+    orbitalPoints.scale.set(s, s, s);
+
+    // Particle "To-and-Fro" Jitter
+    for (let i = 0; i < N; i++) {
+        const idx = i * 3;
+        currentPos[idx] = basePos[idx] + Math.sin(pulse + basePos[idx]) * 0.6;
+        currentPos[idx+1] = basePos[idx+1] + Math.cos(pulse + basePos[idx+1]) * 0.6;
+        currentPos[idx+2] = basePos[idx+2] + Math.sin(pulse * 0.8 + basePos[idx+2]) * 0.6;
+    }
+    
+    pointsGeo.attributes.position.needsUpdate = true;
+    renderer.render(scene, camera);
+}
+animate(0);
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
