@@ -2,9 +2,6 @@
 
 A real-time, gesture-controlled simulation of electron probability distributions. This project visualizes the $s, p, d,$ and $f$ orbitals using a particle-based engine, allowing users to interact with quantum states through hand movements.
 
-## 🚀 Live Demo
-**[PASTE YOUR GITHUB PAGES LINK HERE]**
-*(Note: Requires camera access for the AI hand-tracking to function)*
 
 ---
 
