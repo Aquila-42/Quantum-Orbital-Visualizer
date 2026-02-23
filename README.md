@@ -3,8 +3,6 @@
 A real-time, gesture-controlled simulation of electron probability distributions. This project visualizes the $s, p, d,$ and $f$ orbitals using a particle-based engine, allowing users to interact with quantum states through hand movements.
 
 
----
-
 ## 💡 The Project Concept
 I built this because atomic orbitals are often taught as static 2D images. I wanted to create a "Quantum Playground" where you could physically move, scale, and switch between orbital states using AI-powered hand tracking.
 
